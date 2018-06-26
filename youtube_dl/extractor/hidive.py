@@ -17,6 +17,8 @@ class HiDiveIE(InfoExtractor):
     # Using X-Forwarded-For results in 403 HTTP error for HLS fragments,
     # so disabling geo bypass completely
     _GEO_BYPASS = False
+    _NETRC_MACHINE = 'hidive'
+    _LOGIN_URL = 'https://www.hidive.com/account/login'
 
     _TESTS = [{
         'url': 'https://www.hidive.com/stream/the-comic-artist-and-his-assistants/s01e001',
@@ -30,9 +32,26 @@ class HiDiveIE(InfoExtractor):
         },
         'params': {
             'skip_download': True,
-            'proxy': '192.99.245.228:3128',
         },
+        'skip': 'Requires Authentication',
     }]
+
+    def _real_initialize(self):
+        email, password = self._get_login_info()
+        if email is None:
+            return
+
+        webpage = self._download_webpage(self._LOGIN_URL, None)
+        form = self._search_regex(
+            r'(?s)<form[^>]+action="/account/login"[^>]*>(.+?)</form>',
+            webpage, 'login form')
+        data = self._hidden_inputs(form)
+        data.update({
+            'Email': email,
+            'Password': password,
+        })
+        self._download_webpage(
+            self._LOGIN_URL, None, 'Logging in', data=urlencode_postdata(data))
 
     def _real_extract(self, url):
         mobj = re.match(self._VALID_URL, url)
@@ -44,6 +63,7 @@ class HiDiveIE(InfoExtractor):
             data=urlencode_postdata({
                 'Title': title,
                 'Key': key,
+                'PlayerId': 'f4f895ce1ca713ba263b91caeb1daa2d08904783',
             }))
 
         restriction = settings.get('restrictionReason')
@@ -80,6 +100,7 @@ class HiDiveIE(InfoExtractor):
                 subtitles.setdefault(cc_lang, []).append({
                     'url': cc_url,
                 })
+        self._sort_formats(formats)
 
         season_number = int_or_none(self._search_regex(
             r's(\d+)', key, 'season number', default=None))
